@@ -19,7 +19,7 @@
   "llm": {
     "provider": "minimax",
     "model": "MiniMax-M2.7",
-    "apiKey": "sk-api-ELZi1532lTN5tM1pJAanauToxbg2t5rVeibVb9AVEu6LMo7LjWV7IOJr4_RrkpPXxS1Pwzq567MSrzBDcO5bcguI3S5KF29DHQDyLQJ7Na4V2w7-IhT2sB0",
+    "apiKey": "",
     "baseUrl": "https://api.minimaxi.com/v1"
   },
   "vectorDb": {

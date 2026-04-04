@@ -1,7 +1,7 @@
 {
   "name": "jibuxia",
   "version": "1.0.0",
-  "description": "记不下 - ADHD 外脑系统，帮你收集杂念、整理归类",
+  "description": "记不下 - 外脑系统，帮你收集杂念、整理归类",
   "type": "module",
   "scripts": {
     "start": "node scripts/orchestrate.js",
@@ -12,7 +12,8 @@
     "lint": "node scripts/lint.js",
     "lint:llm": "node lib/llm-lint.js",
     "fetch": "node scripts/fetch.js",
-    "index": "node scripts/index.js"
+    "index": "node scripts/index.js",
+    "status": "node scripts/status.js"
   },
   "dependencies": {
     "ws": "^8.16.0",

@@ -28,6 +28,8 @@ mkdirSync(ASSETS_DIR, { recursive: true });
 
 let compileDebounce = null;
 let fetchQueue = [];
+let compileQueue = [];
+let isCompileRunning = false;
 
 function log(msg) {
   console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
@@ -61,14 +63,43 @@ async function fetchUrl(filepath) {
   }
 }
 
-async function compile() {
-  log('[compile] Running LLM compilation...');
+async function saveCompileResult(result) {
   try {
-    await runProcess('lib/llm-compiler.js');
-    log('[compile] Done');
+    const resultFile = join(DATA_DIR, 'last-compile.json');
+    writeFileSync(resultFile, JSON.stringify({
+      ...result,
+      timestamp: new Date().toISOString()
+    }, null, 2));
   } catch (e) {
-    log(`[compile] Error: ${e.message}`);
+    log(`[compile] Warning: Could not save compile result: ${e.message}`);
   }
+}
+
+async function compile(options = {}) {
+  const { maxRetries = 3, baseDelayMs = 5000 } = options;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    log(`[compile] Running LLM compilation (attempt ${attempt}/${maxRetries})...`);
+    try {
+      await runProcess('lib/llm-compiler.js');
+      await updateIndex();
+      await indexContent();
+      log('[compile] Done');
+      await saveCompileResult({ success: true });
+      return { success: true };
+    } catch (e) {
+      log(`[compile] Error: ${e.message}`);
+      if (attempt < maxRetries) {
+        const delay = baseDelayMs * Math.pow(2, attempt - 1);
+        log(`[compile] Retrying in ${delay}ms...`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+  
+  log(`[compile] Failed after ${maxRetries} attempts`);
+  await saveCompileResult({ success: false, error: 'max_retries_exceeded' });
+  return { success: false, error: 'max_retries_exceeded' };
 }
 
 async function updateIndex() {
@@ -99,12 +130,32 @@ async function processFetchQueue() {
   
   const filepath = fetchQueue.shift();
   await fetchUrl(filepath);
+  enqueueCompile();
   
   if (fetchQueue.length > 0) {
     setTimeout(() => processFetchQueue(), 1000);
-  } else {
-    debouncedCompile();
   }
+}
+
+async function processCompileQueue() {
+  if (isCompileRunning) return;
+  if (compileQueue.length === 0) return;
+  
+  isCompileRunning = true;
+  const task = compileQueue.shift();
+  
+  await compile({ maxRetries: 3, baseDelayMs: 5000 });
+  
+  isCompileRunning = false;
+  
+  if (compileQueue.length > 0) {
+    setTimeout(() => processCompileQueue(), 1000);
+  }
+}
+
+function enqueueCompile() {
+  compileQueue.push({ timestamp: Date.now() });
+  processCompileQueue();
 }
 
 async function startAcpClient() {
@@ -163,9 +214,11 @@ async function startWatcher() {
     const stats = {
       links: readdirSync(LINKS_DIR).filter(f => extname(f) === '.md').length,
       content: readdirSync(CONTENT_DIR).filter(f => extname(f) === '.md').length,
-      queue: fetchQueue.length
+      fetchQueue: fetchQueue.length,
+      compileQueue: compileQueue.length,
+      isCompiling: isCompileRunning
     };
-    log(`[status] links=${stats.links} content=${stats.content} queue=${stats.queue}`);
+    log(`[status] links=${stats.links} content=${stats.content} fetchQueue=${stats.fetchQueue} compileQueue=${stats.compileQueue} compiling=${stats.isCompiling}`);
   }, 60000);
 }
 
