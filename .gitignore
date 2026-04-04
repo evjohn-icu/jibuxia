@@ -1,0 +1,14 @@
+node_modules/
+data/
+*.db
+*.db-*
+raw/links/*.md
+raw/content/*.md
+wiki/**/*.md
+!wiki/index.md
+!wiki/concepts/.gitkeep
+!wiki/articles/.gitkeep
+!wiki/assets/.gitkeep
+.DS_Store
+*.log
+.env

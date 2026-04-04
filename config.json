@@ -1,0 +1,37 @@
+{
+  "gateway": {
+    "url": "ws://127.0.0.1:18789",
+    "token": ""
+  },
+  "session": {
+    "key": "agent:main:link-collector",
+    "label": "link-collector"
+  },
+  "paths": {
+    "raw": "raw",
+    "links": "raw/links",
+    "content": "raw/content",
+    "wiki": "wiki",
+    "concepts": "wiki/concepts",
+    "articles": "wiki/articles",
+    "assets": "wiki/assets"
+  },
+  "llm": {
+    "provider": "minimax",
+    "model": "MiniMax-M2.7",
+    "apiKey": "sk-api-ELZi1532lTN5tM1pJAanauToxbg2t5rVeibVb9AVEu6LMo7LjWV7IOJr4_RrkpPXxS1Pwzq567MSrzBDcO5bcguI3S5KF29DHQDyLQJ7Na4V2w7-IhT2sB0",
+    "baseUrl": "https://api.minimaxi.com/v1"
+  },
+  "vectorDb": {
+    "path": "data/knowledge.db"
+  },
+  "compile": {
+    "debounceMs": 30000,
+    "batchSize": 10,
+    "systemPrompt": "You are a knowledge compiler. Read raw sources and produce organized wiki articles."
+  },
+  "lint": {
+    "schedule": "0 2 * * *",
+    "enabled": true
+  }
+}

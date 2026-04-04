@@ -1,0 +1,27 @@
+{
+  "name": "jibuxia",
+  "version": "1.0.0",
+  "description": "记不下 - ADHD 外脑系统，帮你收集杂念、整理归类",
+  "type": "module",
+  "scripts": {
+    "start": "node scripts/orchestrate.js",
+    "watch": "node scripts/watch.js",
+    "compile": "node scripts/compile.js",
+    "compile:llm": "node lib/llm-compiler.js",
+    "ask": "node scripts/ask.js",
+    "lint": "node scripts/lint.js",
+    "lint:llm": "node lib/llm-lint.js",
+    "fetch": "node scripts/fetch.js",
+    "index": "node scripts/index.js"
+  },
+  "dependencies": {
+    "ws": "^8.16.0",
+    "axios": "^1.6.7",
+    "cheerio": "^1.0.0-rc.12",
+    "gray-matter": "^4.0.3",
+    "chokidar": "^3.5.3",
+    "openai": "^4.26.0",
+    "@anthropic-ai/sdk": "^0.17.0",
+    "marked": "^11.1.1"
+  }
+}

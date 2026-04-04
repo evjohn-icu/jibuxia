@@ -1,0 +1,191 @@
+import { watch } from 'chokidar';
+import { readFileSync, readdirSync, statSync, writeFileSync, mkdirSync, existsSync } from 'fs';
+import { join, dirname, extname, basename } from 'path';
+import { fileURLToPath } from 'url';
+import { spawn } from 'child_process';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT = join(__dirname, '..');
+const CONFIG = JSON.parse(readFileSync(join(ROOT, 'config.json'), 'utf-8'));
+
+const LINKS_DIR = join(ROOT, CONFIG.paths.links);
+const CONTENT_DIR = join(ROOT, CONFIG.paths.content);
+const WIKI_DIR = join(ROOT, CONFIG.paths.wiki);
+const DATA_DIR = join(ROOT, 'data');
+const RAW_DIR = join(ROOT, CONFIG.paths.raw);
+const CONCEPTS_DIR = join(ROOT, CONFIG.paths.concepts);
+const ARTICLES_DIR = join(ROOT, CONFIG.paths.articles);
+const ASSETS_DIR = join(ROOT, CONFIG.paths.assets);
+
+mkdirSync(RAW_DIR, { recursive: true });
+mkdirSync(LINKS_DIR, { recursive: true });
+mkdirSync(CONTENT_DIR, { recursive: true });
+mkdirSync(WIKI_DIR, { recursive: true });
+mkdirSync(DATA_DIR, { recursive: true });
+mkdirSync(CONCEPTS_DIR, { recursive: true });
+mkdirSync(ARTICLES_DIR, { recursive: true });
+mkdirSync(ASSETS_DIR, { recursive: true });
+
+let compileDebounce = null;
+let fetchQueue = [];
+
+function log(msg) {
+  console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
+}
+
+function runProcess(script, args = []) {
+  return new Promise((resolve, reject) => {
+    const child = spawn('node', [script, ...args], {
+      cwd: ROOT,
+      stdio: ['inherit', 'pipe', 'pipe']
+    });
+    
+    let output = '';
+    child.stdout.on('data', d => output += d.toString());
+    child.stderr.on('data', d => output += d.toString());
+    
+    child.on('close', code => {
+      if (code === 0) resolve(output);
+      else reject(new Error(`Script exited with code ${code}`));
+    });
+  });
+}
+
+async function fetchUrl(filepath) {
+  log(`[fetch] Processing: ${basename(filepath)}`);
+  try {
+    await runProcess('lib/fetcher.js', [filepath]);
+    log(`[fetch] Done: ${basename(filepath)}`);
+  } catch (e) {
+    log(`[fetch] Error: ${e.message}`);
+  }
+}
+
+async function compile() {
+  log('[compile] Running LLM compilation...');
+  try {
+    await runProcess('lib/llm-compiler.js');
+    log('[compile] Done');
+  } catch (e) {
+    log(`[compile] Error: ${e.message}`);
+  }
+}
+
+async function updateIndex() {
+  try {
+    await runProcess('lib/compiler.js');
+  } catch (e) {
+  }
+}
+
+async function indexContent() {
+  try {
+    await runProcess('lib/indexer.js');
+  } catch (e) {
+  }
+}
+
+function debouncedCompile(delay = 30000) {
+  if (compileDebounce) clearTimeout(compileDebounce);
+  compileDebounce = setTimeout(() => {
+    log('[trigger] Compiling after debounce');
+    compile().then(() => updateIndex()).then(() => indexContent());
+    compileDebounce = null;
+  }, delay);
+}
+
+async function processFetchQueue() {
+  if (fetchQueue.length === 0) return;
+  
+  const filepath = fetchQueue.shift();
+  await fetchUrl(filepath);
+  
+  if (fetchQueue.length > 0) {
+    setTimeout(() => processFetchQueue(), 1000);
+  } else {
+    debouncedCompile();
+  }
+}
+
+async function startAcpClient() {
+  const { gateway, session } = CONFIG;
+  const acpPath = join(ROOT, 'acp-client', 'index.js');
+  
+  if (!existsSync(acpPath)) {
+    log('[acp] ACP client not found, skipping');
+    return;
+  }
+  
+  log(`[acp] Starting ACP client: ${gateway.url}/${session.key}`);
+  
+  const child = spawn('node', [acpPath], {
+    cwd: join(ROOT, 'acp-client'),
+    stdio: ['inherit', 'pipe', 'pipe']
+  });
+  
+  child.stdout.on('data', d => {
+    const msg = d.toString().trim();
+    if (msg.includes('[+]') || msg.includes('[i]')) {
+      log(`[acp] ${msg}`);
+    }
+  });
+  
+  child.stderr.on('data', d => log(`[acp] ${d.toString()}`));
+  
+  child.on('close', code => {
+    log(`[acp] ACP client exited with code ${code}, restarting in 5s`);
+    setTimeout(startAcpClient, 5000);
+  });
+}
+
+async function startWatcher() {
+  log('[watch] Starting file watchers...');
+  log(`[watch] Links: ${LINKS_DIR}`);
+  log(`[watch] Content: ${CONTENT_DIR}`);
+  
+  const linkWatcher = watch(LINKS_DIR, {
+    persistent: true,
+    ignoreInitial: true,
+    awaitWriteFinish: { stabilityThreshold: 2000, pollInterval: 100 }
+  });
+  
+  linkWatcher.on('add', filepath => {
+    if (extname(filepath) === '.md') {
+      log(`[watch] New link file: ${basename(filepath)}`);
+      fetchQueue.push(filepath);
+      processFetchQueue();
+    }
+  });
+  
+  log('[watch] Watching for changes...');
+  
+  setInterval(() => {
+    const stats = {
+      links: readdirSync(LINKS_DIR).filter(f => extname(f) === '.md').length,
+      content: readdirSync(CONTENT_DIR).filter(f => extname(f) === '.md').length,
+      queue: fetchQueue.length
+    };
+    log(`[status] links=${stats.links} content=${stats.content} queue=${stats.queue}`);
+  }, 60000);
+}
+
+async function main() {
+  log('[main] 记不下 ADHD 外脑系统 启动中');
+  log(`[main] Root: ${ROOT}`);
+  
+  await Promise.all([
+    startWatcher(),
+    startAcpClient()
+  ]);
+  
+  log('[main] All watchers active. Press Ctrl+C to stop.');
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(e => {
+    console.error('[main] Fatal error:', e);
+    process.exit(1);
+  });
+}
+
+export { main, startWatcher, startAcpClient };
