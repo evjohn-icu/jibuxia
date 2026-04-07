@@ -5,8 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node scripts/orchestrate.js",
-    "watch": "node scripts/watch.js",
-    "compile": "node scripts/compile.js",
+    "compile": "node lib/compiler.js",
     "compile:llm": "node lib/llm-compiler.js",
     "ask": "node scripts/ask.js",
     "lint": "node scripts/lint.js",
@@ -16,13 +15,14 @@
     "status": "node scripts/status.js"
   },
   "dependencies": {
-    "ws": "^8.16.0",
+    "@anthropic-ai/sdk": "^0.17.0",
     "axios": "^1.6.7",
     "cheerio": "^1.0.0-rc.12",
-    "gray-matter": "^4.0.3",
     "chokidar": "^3.5.3",
+    "gray-matter": "^4.0.3",
+    "marked": "^11.1.1",
     "openai": "^4.26.0",
-    "@anthropic-ai/sdk": "^0.17.0",
-    "marked": "^11.1.1"
+    "pino": "^10.3.1",
+    "ws": "^8.16.0"
   }
 }

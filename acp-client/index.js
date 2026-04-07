@@ -1,7 +1,8 @@
-import { readFileSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, unlinkSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join, resolve } from 'path';
 import { WebSocket } from 'ws';
+import { watch } from 'chokidar';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = join(__dirname, 'config.json');
@@ -28,6 +29,36 @@ function loadConfig() {
 
 const config = loadConfig();
 const LINKS_DIR = join(ROOT_DIR, 'raw', 'links');
+const REPLY_QUEUE_DIR = join(ROOT_DIR, 'data', 'reply-queue');
+
+mkdirSync(REPLY_QUEUE_DIR, { recursive: true });
+
+let ws = null;
+let reconnectAttempts = 0;
+let heartbeatTimer = null;
+const MAX_RECONNECT_DELAY = 300000;
+const HEARTBEAT_INTERVAL = 30000;
+
+function getReconnectDelay() {
+  const delay = Math.min(1000 * Math.pow(2, reconnectAttempts), MAX_RECONNECT_DELAY);
+  return delay;
+}
+
+function startHeartbeat() {
+  stopHeartbeat();
+  heartbeatTimer = setInterval(() => {
+    if (ws && ws.readyState === 1) {
+      ws.ping();
+    }
+  }, HEARTBEAT_INTERVAL);
+}
+
+function stopHeartbeat() {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer);
+    heartbeatTimer = null;
+  }
+}
 
 const URL_REGEX = /https?:\/\/[^\s<>"{}|\\^`\[\]]+/g;
 
@@ -43,36 +74,46 @@ function generateFilename() {
   return `${ts}-${rand}.md`;
 }
 
-async function writeLinkFile(url) {
-  const { writeFileSync, mkdirSync } = await import('fs');
-  
-  mkdirSync(LINKS_DIR, { recursive: true });
-  
+async function writeLinkFile(url, replyTo = null) {
   const filename = generateFilename();
   const filepath = join(LINKS_DIR, filename);
   const timestamp = new Date().toISOString();
   
-  const content = `---
-source: acp
-timestamp: ${timestamp}
-url: ${url}
----
-
-# Source: ${url}
-
-> Imported via ACP link collector
-`;
+  const frontmatter = {
+    source: 'acp',
+    timestamp,
+    url
+  };
   
+  if (replyTo) {
+    frontmatter.replyTo = replyTo;
+  }
+  
+  let content = '---\n';
+  for (const [key, value] of Object.entries(frontmatter)) {
+    content += `${key}: ${value}\n`;
+  }
+  content += '---\n\n';
+  content += `# Source: ${url}\n\n> Imported via ACP link collector`;
+  
+  mkdirSync(LINKS_DIR, { recursive: true });
   writeFileSync(filepath, content);
-  console.log(`[+] Saved: ${url} → ${filename}`);
+  console.log(`[+] Saved: ${url} → ${filename}${replyTo ? ` (replyTo: ${replyTo})` : ''}`);
 }
 
-function send(ws, obj) {
-  ws.send(JSON.stringify(obj));
+function sendWs(obj) {
+  if (ws && ws.readyState === 1) {
+    ws.send(JSON.stringify(obj));
+  }
+}
+
+function extractReplyTo(obj) {
+  return obj.replyTo || obj.params?.replyTo || null;
 }
 
 async function handleMessage(obj) {
   let text = '';
+  const replyTo = extractReplyTo(obj);
   
   if (obj.type === 'text' || obj.content) {
     text = obj.content?.[0]?.text || obj.text || '';
@@ -83,12 +124,66 @@ async function handleMessage(obj) {
   if (text) {
     const urls = extractUrls(text);
     for (const url of urls) {
-      await writeLinkFile(url);
+      await writeLinkFile(url, replyTo);
     }
     if (urls.length > 0) {
       console.log(`[i] Extracted ${urls.length} URL(s)`);
     }
   }
+}
+
+function sendReply(replyTo, content) {
+  if (!replyTo) return;
+  
+  sendWs({
+    jsonrpc: '2.0',
+    method: 'agent_message',
+    params: {
+      sessionKey: replyTo,
+      content: [
+        {
+          type: 'text',
+          text: content
+        }
+      ]
+    }
+  });
+  console.log(`[i] Sent reply to ${replyTo}`);
+}
+
+function processReplyQueue() {
+  try {
+    const files = readdirSync(REPLY_QUEUE_DIR).filter(f => f.endsWith('.json'));
+    
+    for (const file of files) {
+      const filepath = join(REPLY_QUEUE_DIR, file);
+      try {
+        const data = JSON.parse(readFileSync(filepath, 'utf-8'));
+        
+        if (data.replyTo && data.content) {
+          sendReply(data.replyTo, data.content);
+        }
+        
+        unlinkSync(filepath);
+      } catch (e) {
+        console.error(`[!] Failed to process reply file ${file}:`, e.message);
+      }
+    }
+  } catch (e) {
+  }
+}
+
+function startReplyQueueWatcher() {
+  const watcher = watch(REPLY_QUEUE_DIR, {
+    persistent: true,
+    ignoreInitial: true
+  });
+  
+  watcher.on('add', () => {
+    processReplyQueue();
+  });
+  
+  console.log(`[i] Reply queue watcher active: ${REPLY_QUEUE_DIR}`);
 }
 
 async function start() {
@@ -99,12 +194,16 @@ async function start() {
   console.log(`[i] Session: ${sessionKey}`);
   console.log(`[i] Output: ${LINKS_DIR}`);
   
+  startReplyQueueWatcher();
+  
   const ws = new WebSocket(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {}
   });
   
   ws.on('open', () => {
     console.log('[i] Connected, initializing...');
+    reconnectAttempts = 0;
+    startHeartbeat();
     send(ws, {
       jsonrpc: '2.0',
       method: 'initialize',
@@ -166,8 +265,14 @@ async function start() {
   });
   
   ws.on('close', () => {
-    console.log('[!] Disconnected, reconnecting in 5s...');
-    setTimeout(start, 5000);
+    stopHeartbeat();
+    const delay = getReconnectDelay();
+    reconnectAttempts++;
+    console.log(`[!] Disconnected, reconnecting in ${Math.round(delay/1000)}s... (attempt ${reconnectAttempts})`);
+    setTimeout(start, delay);
+  });
+  
+  ws.on('pong', () => {
   });
 }
 

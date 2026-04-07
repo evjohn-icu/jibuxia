@@ -16,6 +16,7 @@ const RAW_DIR = join(ROOT, CONFIG.paths.raw);
 const CONCEPTS_DIR = join(ROOT, CONFIG.paths.concepts);
 const ARTICLES_DIR = join(ROOT, CONFIG.paths.articles);
 const ASSETS_DIR = join(ROOT, CONFIG.paths.assets);
+const REPLY_QUEUE_DIR = join(ROOT, 'data', 'reply-queue');
 
 mkdirSync(RAW_DIR, { recursive: true });
 mkdirSync(LINKS_DIR, { recursive: true });
@@ -25,14 +26,28 @@ mkdirSync(DATA_DIR, { recursive: true });
 mkdirSync(CONCEPTS_DIR, { recursive: true });
 mkdirSync(ARTICLES_DIR, { recursive: true });
 mkdirSync(ASSETS_DIR, { recursive: true });
+mkdirSync(REPLY_QUEUE_DIR, { recursive: true });
 
 let compileDebounce = null;
 let fetchQueue = [];
 let compileQueue = [];
 let isCompileRunning = false;
+let isShuttingDown = false;
+let acpChild = null;
+let pendingReplies = new Map();
 
 function log(msg) {
   console.log(`[${new Date().toISOString().slice(11, 19)}] ${msg}`);
+}
+
+function extractReplyTo(filepath) {
+  try {
+    const content = readFileSync(filepath, 'utf-8');
+    const match = content.match(/^replyTo:\s*(.+)$/m);
+    return match ? match[1].trim() : null;
+  } catch {
+    return null;
+  }
 }
 
 function runProcess(script, args = []) {
@@ -77,6 +92,7 @@ async function saveCompileResult(result) {
 
 async function compile(options = {}) {
   const { maxRetries = 3, baseDelayMs = 5000 } = options;
+  const replyToSet = new Set(pendingReplies.values());
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     log(`[compile] Running LLM compilation (attempt ${attempt}/${maxRetries})...`);
@@ -86,6 +102,17 @@ async function compile(options = {}) {
       await indexContent();
       log('[compile] Done');
       await saveCompileResult({ success: true });
+      
+      if (replyToSet.size > 0) {
+        const concepts = readdirSync(CONCEPTS_DIR).filter(f => extname(f) === '.md').length;
+        const articles = readdirSync(ARTICLES_DIR).filter(f => extname(f) === '.md').length;
+        const replyContent = `记不下知识库更新完成！\n\n新增 ${concepts} 个概念，${articles} 篇文章。\n\n查看: wiki/index.md`;
+        for (const replyTo of replyToSet) {
+          queueReply(replyTo, replyContent);
+        }
+        pendingReplies.clear();
+      }
+      
       return { success: true };
     } catch (e) {
       log(`[compile] Error: ${e.message}`);
@@ -129,6 +156,11 @@ async function processFetchQueue() {
   if (fetchQueue.length === 0) return;
   
   const filepath = fetchQueue.shift();
+  const replyTo = extractReplyTo(filepath);
+  if (replyTo) {
+    pendingReplies.set(filepath, replyTo);
+    log(`[watch] Tracked replyTo for ${basename(filepath)}: ${replyTo}`);
+  }
   await fetchUrl(filepath);
   enqueueCompile();
   
@@ -154,8 +186,15 @@ async function processCompileQueue() {
 }
 
 function enqueueCompile() {
-  compileQueue.push({ timestamp: Date.now() });
+  compileQueue.push({ timestamp: Date.now(), replyToFiles: [...pendingReplies.keys()] });
   processCompileQueue();
+}
+
+function queueReply(replyTo, content) {
+  const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.json`;
+  const filepath = join(REPLY_QUEUE_DIR, filename);
+  writeFileSync(filepath, JSON.stringify({ replyTo, content }));
+  log(`[reply] Queued reply to ${replyTo}`);
 }
 
 async function startAcpClient() {
@@ -169,23 +208,25 @@ async function startAcpClient() {
   
   log(`[acp] Starting ACP client: ${gateway.url}/${session.key}`);
   
-  const child = spawn('node', [acpPath], {
+  acpChild = spawn('node', [acpPath], {
     cwd: join(ROOT, 'acp-client'),
     stdio: ['inherit', 'pipe', 'pipe']
   });
   
-  child.stdout.on('data', d => {
+  acpChild.stdout.on('data', d => {
     const msg = d.toString().trim();
     if (msg.includes('[+]') || msg.includes('[i]')) {
       log(`[acp] ${msg}`);
     }
   });
   
-  child.stderr.on('data', d => log(`[acp] ${d.toString()}`));
+  acpChild.stderr.on('data', d => log(`[acp] ${d.toString()}`));
   
-  child.on('close', code => {
-    log(`[acp] ACP client exited with code ${code}, restarting in 5s`);
-    setTimeout(startAcpClient, 5000);
+  acpChild.on('close', code => {
+    if (!isShuttingDown) {
+      log(`[acp] ACP client exited with code ${code}, restarting in 5s`);
+      setTimeout(startAcpClient, 5000);
+    }
   });
 }
 
@@ -233,6 +274,36 @@ async function main() {
   
   log('[main] All watchers active. Press Ctrl+C to stop.');
 }
+
+async function gracefulShutdown(signal) {
+  if (isShuttingDown) return;
+  isShuttingDown = true;
+  
+  log(`[main] Received ${signal}, shutting down gracefully...`);
+  
+  if (compileDebounce) {
+    clearTimeout(compileDebounce);
+    compileDebounce = null;
+  }
+  
+  log('[main] Waiting for current tasks to finish...');
+  
+  while (isCompileRunning || compileQueue.length > 0) {
+    await new Promise(resolve => setTimeout(resolve, 1000));
+  }
+  
+  if (acpChild) {
+    log('[main] Stopping ACP client...');
+    acpChild.kill('SIGTERM');
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  
+  log('[main] Shutdown complete');
+  process.exit(0);
+}
+
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
 
 if (import.meta.url === `file://${process.argv[1]}`) {
   main().catch(e => {
