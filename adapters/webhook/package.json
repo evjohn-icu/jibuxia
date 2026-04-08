@@ -1,0 +1,7 @@
+{
+  "name": "jibuxia-webhook",
+  "version": "1.0.0",
+  "description": "Jibuxia webhook adapter for HTTP-based ingestion",
+  "type": "module",
+  "main": "server.js"
+}

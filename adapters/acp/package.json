@@ -1,0 +1,7 @@
+{
+  "name": "jibuxia-adapter-acp",
+  "version": "1.0.0",
+  "description": "Jibuxia ACP adapter - for ACP protocol compatible platforms",
+  "type": "module",
+  "main": "index.js"
+}

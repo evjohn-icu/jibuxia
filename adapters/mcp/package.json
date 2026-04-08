@@ -1,0 +1,10 @@
+{
+  "name": "jibuxia-mcp",
+  "version": "1.0.0",
+  "description": "Jibuxia MCP server for Claude Desktop / Cursor",
+  "type": "module",
+  "main": "server.js",
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.0.0-alpha.2"
+  }
+}

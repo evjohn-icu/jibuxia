@@ -4,7 +4,7 @@
   "description": "记不下 - 外脑系统，帮你收集杂念、整理归类",
   "type": "module",
   "scripts": {
-    "start": "node scripts/orchestrate.js",
+    "ingest": "node scripts/ingest.js",
     "compile": "node lib/compiler.js",
     "compile:llm": "node lib/llm-compiler.js",
     "ask": "node scripts/ask.js",

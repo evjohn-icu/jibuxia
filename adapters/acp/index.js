@@ -204,7 +204,7 @@ async function start() {
     console.log('[i] Connected, initializing...');
     reconnectAttempts = 0;
     startHeartbeat();
-    send(ws, {
+    sendWs( {
       jsonrpc: '2.0',
       method: 'initialize',
       params: {
@@ -228,7 +228,7 @@ async function start() {
       
       if (msg.id === 1 && msg.result) {
         console.log('[i] Protocol initialized');
-        send(ws, {
+        sendWs( {
           jsonrpc: '2.0',
           method: 'newSession',
           params: {

@@ -4,7 +4,7 @@
     "token": ""
   },
   "session": {
-    "key": "agent:main:link-collector",
+    "key": "agent:henry:link-collector",
     "label": "link-collector"
   }
 }
