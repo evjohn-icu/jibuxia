@@ -88,6 +88,10 @@ jibuxia/
 ### 1. 配置
 
 ```bash
+export PATH="/home/linuxbrew/.linuxbrew/bin:$PATH"  # 如果 Node/npm 由 Linuxbrew 安装
+npm install
+(cd adapters/mcp && npm install)
+
 cp .env.example .env
 # 编辑 .env，设置 JIBUXIA_LLM_API_KEY
 ```
@@ -99,7 +103,9 @@ cp .env.example .env
 npm run ingest -- https://example.com/article
 
 # JSON 输出（方便程序解析）
-npm run ingest -- https://example.com/article --json
+node scripts/ingest.js https://example.com/article --json
+# 或：
+npm run --silent ingest -- https://example.com/article --json
 
 # 只抓取不编译
 npm run ingest -- https://example.com/article --fetch-only
@@ -116,6 +122,10 @@ npm run ask -- "AI 是什么？"
 # 查看状态
 npm run status
 ```
+
+`ingest` 当前采用“增量触发、全库上下文编译”：新 URL 抓取完成后，会让 LLM 基于整个已有 raw content/wiki 上下文创建或更新页面。没有设置 `JIBUXIA_LLM_API_KEY` 时，fetch-only、status、索引和本地搜索仍可用；LLM 编译和回答会返回清楚的 warning/error。
+
+机器调用 `--json` 时优先使用 `node scripts/ingest.js ... --json` 或 `npm run --silent ...`，避免 npm 自己的脚本头污染 stdout。
 
 ## 接入方式
 

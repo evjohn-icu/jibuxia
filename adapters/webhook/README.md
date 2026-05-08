@@ -38,7 +38,12 @@ curl -X POST http://localhost:3456/ingest \
   "url": "https://example.com/article",
   "status": "ok",
   "skipped": false,
-  "contentPath": "raw/content/2026-04-08-abc123.md"
+  "skippedReason": null,
+  "contentPath": "raw/content/2026-04-08-abc123.md",
+  "wikiPages": [],
+  "indexedChunks": 3,
+  "compileStatus": "ok",
+  "compileStrategy": "incremental-trigger-full-context"
 }
 ```
 
@@ -48,6 +53,8 @@ curl -X POST http://localhost:3456/ingest \
 |------|------|------|
 | url | string | 要收录的 URL（必填） |
 | force | boolean | 强制重新收录（跳过去重） |
+
+只有 `POST /ingest` 会触发收录；其他路径返回 `404`。
 
 ## 目录结构
 

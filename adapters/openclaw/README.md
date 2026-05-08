@@ -25,7 +25,10 @@ node /path/to/jibuxia/scripts/ingest.js <url> --json
   "status": "ok",
   "title": "文章标题",
   "skipped": false,
-  "contentPath": "raw/content/2026-04-08-abc123.md"
+  "contentPath": "raw/content/2026-04-08-abc123.md",
+  "wikiPages": [],
+  "indexedChunks": 0,
+  "compileStatus": "ok"
 }
 ```
 

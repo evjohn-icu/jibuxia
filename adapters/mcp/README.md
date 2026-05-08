@@ -24,7 +24,7 @@ npm install
 {
   "mcpServers": {
     "jibuxia": {
-      "command": "node",
+      "command": "/home/linuxbrew/.linuxbrew/bin/node",
       "args": ["/path/to/jibuxia/adapters/mcp/server.js"]
     }
   }
@@ -39,7 +39,7 @@ npm install
 {
   "mcpServers": {
     "jibuxia": {
-      "command": "node",
+      "command": "/home/linuxbrew/.linuxbrew/bin/node",
       "args": ["/path/to/jibuxia/adapters/mcp/server.js"]
     }
   }
@@ -63,4 +63,4 @@ User: 记不下状态如何？
 
 - Node.js 18+
 - Jibuxia 已配置 (`JIBUXIA_LLM_API_KEY` 环境变量)
-- `@modelcontextprotocol/server` (已在 package.json 中声明)
+- `@modelcontextprotocol/sdk` (已在 package.json 中声明)
