@@ -4,7 +4,7 @@ import crypto from 'crypto';
 import { paths } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 
-const DATA_DIR = paths.wiki.replace('/wiki', '/data');
+const DATA_DIR = join(paths.wiki, '..', 'data');
 const INGESTED_FILE = join(DATA_DIR, 'ingested.json');
 
 mkdirSync(DATA_DIR, { recursive: true });
@@ -60,7 +60,7 @@ async function indexNewContent() {
 }
 
 async function ingestUrl(url, options = {}) {
-  const { force = false, fetchOnly = false, json = false } = options;
+  const { force = false, fetchOnly = false } = options;
   
   const result = {
     url,
@@ -68,7 +68,10 @@ async function ingestUrl(url, options = {}) {
     skipped: false,
     skippedReason: null,
     contentPath: null,
-    wikiPath: null,
+    wikiPages: [],
+    indexedChunks: 0,
+    compileStatus: fetchOnly ? 'skipped' : 'pending',
+    compileStrategy: 'incremental-trigger-full-context',
     title: null
   };
   
@@ -76,13 +79,8 @@ async function ingestUrl(url, options = {}) {
     result.skipped = true;
     result.skippedReason = 'duplicate';
     result.status = 'skipped';
+    result.compileStatus = 'skipped';
     logger.info(`[ingest] Already ingested: ${url}`);
-    
-    if (json) {
-      console.log(JSON.stringify(result));
-    } else {
-      console.log(`[ingest] Skipped (already ingested): ${url}`);
-    }
     return result;
   }
   
@@ -92,11 +90,7 @@ async function ingestUrl(url, options = {}) {
     if (!contentPath) {
       result.status = 'error';
       result.error = 'fetch_failed';
-      if (json) {
-        console.log(JSON.stringify(result));
-      } else {
-        console.log(`[ingest] Failed to fetch: ${url}`);
-      }
+      result.compileStatus = 'skipped';
       return result;
     }
     
@@ -105,15 +99,14 @@ async function ingestUrl(url, options = {}) {
     
     if (fetchOnly) {
       markIngested(url, { contentPath });
-      if (json) {
-        console.log(JSON.stringify(result));
-      } else {
-        console.log(`[ingest] Fetch only mode, skipping compilation`);
-      }
+      result.compileStatus = 'skipped';
+      logger.info('[ingest] Fetch only mode, skipping compilation');
       return result;
     }
     
     const compileResult = await compileIncremental();
+    result.compileStatus = compileResult.success ? 'ok' : 'warning';
+    result.wikiPages = compileResult.pages || [];
     
     if (!compileResult.success) {
       result.status = 'warning';
@@ -121,36 +114,28 @@ async function ingestUrl(url, options = {}) {
       logger.warn(`[ingest] Compilation had issues: ${compileResult.error}`);
     }
     
-    await indexNewContent();
+    result.indexedChunks = await indexNewContent();
     
-    markIngested(url, { contentPath });
+    markIngested(url, {
+      contentPath,
+      wikiPages: result.wikiPages,
+      indexedChunks: result.indexedChunks,
+      compileStatus: result.compileStatus
+    });
     
     result.title = basename(contentPath, '.md');
-    result.wikiPath = paths.wiki;
-    
-    if (json) {
-      console.log(JSON.stringify(result));
-    } else {
-      console.log(`[ingest] Done: ${url}`);
-    }
     
     return result;
     
   } catch (error) {
     result.status = 'error';
     result.error = error.message;
-    if (json) {
-      console.log(JSON.stringify(result));
-    } else {
-      console.error(`[ingest] Error: ${error.message}`);
-    }
+    result.compileStatus = result.compileStatus === 'pending' ? 'error' : result.compileStatus;
     return result;
   }
 }
 
 async function ingestStdin() {
-  const { fetchUrl } = await import('../lib/fetcher.js');
-  
   let input = '';
   process.stdin.setEncoding('utf-8');
   
@@ -162,11 +147,11 @@ async function ingestStdin() {
     .map(line => line.trim())
     .filter(line => line.startsWith('http://') || line.startsWith('https://'));
   
-  console.log(`[ingest] Processing ${urls.length} URLs from stdin`);
+  logger.info(`[ingest] Processing ${urls.length} URLs from stdin`);
   
   const results = [];
   for (const url of urls) {
-    const result = await ingestUrl(url, { force: false, json: true });
+    const result = await ingestUrl(url, { force: false });
     results.push(result);
     await new Promise(resolve => setTimeout(resolve, 500));
   }
@@ -193,6 +178,10 @@ Examples:
 
 async function main() {
   const args = process.argv.slice(2);
+  const jsonOutput = args.includes('--json');
+  if (jsonOutput) {
+    logger.level = 'silent';
+  }
   
   if (args.length === 0 || args.includes('--help') || args.includes('-h')) {
     showHelp();
@@ -200,14 +189,15 @@ async function main() {
   }
   
   if (args.includes('--stdin')) {
-    await ingestStdin();
+    const results = await ingestStdin();
+    console.log(JSON.stringify(results, null, 2));
     return;
   }
   
   const options = {
     force: args.includes('--force'),
     fetchOnly: args.includes('--fetch-only'),
-    json: args.includes('--json')
+    json: jsonOutput
   };
   
   const url = args.find(arg => arg.startsWith('http://') || arg.startsWith('https://'));
@@ -217,7 +207,21 @@ async function main() {
     process.exit(1);
   }
   
-  await ingestUrl(url, options);
+  const result = await ingestUrl(url, options);
+
+  if (options.json) {
+    console.log(JSON.stringify(result));
+  } else if (result.status === 'skipped') {
+    console.log(`[ingest] Skipped (${result.skippedReason}): ${url}`);
+  } else if (result.status === 'error') {
+    console.error(`[ingest] Error: ${result.error}`);
+  } else {
+    console.log(`[ingest] Done: ${url}`);
+    console.log(`[ingest] Content: ${result.contentPath}`);
+    if (result.compileStatus !== 'skipped') {
+      console.log(`[ingest] Compile: ${result.compileStatus}, pages: ${result.wikiPages.length}, indexed chunks: ${result.indexedChunks}`);
+    }
+  }
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {

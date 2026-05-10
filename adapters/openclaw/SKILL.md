@@ -25,6 +25,9 @@ JSON 格式：
   "skipped": true|false,
   "skippedReason": "duplicate|null",
   "contentPath": "...",
+  "wikiPages": [],
+  "indexedChunks": 0,
+  "compileStatus": "ok|warning|skipped",
   "title": "..."
 }
 ```

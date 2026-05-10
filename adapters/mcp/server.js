@@ -1,9 +1,9 @@
-import { Server } from '@modelcontextprotocol/server';
-import { StdioServerTransport } from '@modelcontextprotocol/server/node';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const JIBUXIA_ROOT = join(__dirname, '..', '..');
@@ -44,7 +44,7 @@ const server = new Server(
 );
 
 server.setRequestHandler(
-  { method: 'tools/list' },
+  ListToolsRequestSchema,
   async () => {
     return {
       tools: [
@@ -95,7 +95,7 @@ server.setRequestHandler(
 );
 
 server.setRequestHandler(
-  { method: 'tools/call' },
+  CallToolRequestSchema,
   async (request) => {
     const { name, arguments: args } = request.params;
 

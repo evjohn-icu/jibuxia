@@ -1,5 +1,5 @@
 import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join, basename, extname } from 'path';
+import { join, extname, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import matter from 'gray-matter';
 

@@ -1,6 +1,11 @@
 #!/bin/bash
 # 记不下 - ADHD 外脑系统 - 启动检查
 
+BREW_BIN="/home/linuxbrew/.linuxbrew/bin"
+if [ -d "$BREW_BIN" ]; then
+    export PATH="$BREW_BIN:$PATH"
+fi
+
 echo "==================================="
 echo "记不下 Pre-flight Check"
 echo "==================================="
@@ -24,6 +29,14 @@ if [ ! -d "node_modules" ]; then
     echo "Installing dependencies..."
     npm install
 fi
+npm ls --depth=0 >/dev/null || { echo "ERROR: Dependencies are missing or invalid. Run: npm install"; exit 1; }
+if [ -f "adapters/mcp/package.json" ]; then
+    if [ ! -d "adapters/mcp/node_modules" ]; then
+        echo "Installing MCP adapter dependencies..."
+        (cd adapters/mcp && npm install)
+    fi
+    (cd adapters/mcp && npm ls --depth=0 >/dev/null) || { echo "ERROR: MCP adapter dependencies are missing or invalid"; exit 1; }
+fi
 echo "OK: Dependencies installed"
 echo ""
 
@@ -40,11 +53,10 @@ echo ""
 # Check LLM config
 echo "[5/5] Checking LLM configuration..."
 LLM_PROVIDER=$(node -e "console.log(require('./config.json').llm.provider)")
-LLM_APIKEY=$(node -e "console.log(require('./config.json').llm.apiKey)")
-if [ -z "$LLM_APIKEY" ]; then
-    echo "WARNING: LLM API key is empty in config.json"
+if [ -z "$JIBUXIA_LLM_API_KEY" ]; then
+    echo "WARNING: JIBUXIA_LLM_API_KEY is not set; fetch-only/status work, LLM compile/ask will need it"
 else
-    echo "OK: LLM provider: $LLM_PROVIDER"
+    echo "OK: LLM provider: $LLM_PROVIDER (JIBUXIA_LLM_API_KEY set)"
 fi
 echo ""
 
@@ -64,9 +76,10 @@ echo "Pre-flight check complete!"
 echo "==================================="
 echo ""
 echo "To start the system:"
-echo "  npm start"
+echo "  npm run status"
 echo ""
 echo "Or run individual modules:"
+echo "  npm run ingest -- <url> --json"
 echo "  npm run fetch        # Fetch URLs from raw/links/"
 echo "  npm run compile:llm  # Compile wiki with LLM"
 echo "  npm run ask \"?\"     # Ask a question"

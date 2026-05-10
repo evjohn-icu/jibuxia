@@ -57,9 +57,17 @@ async function handleRequest(req, res) {
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
+  const path = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
+
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
     res.end();
+    return;
+  }
+
+  if (path !== '/ingest') {
+    res.writeHead(404, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: 'Not found', path }));
     return;
   }
 
