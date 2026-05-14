@@ -5,7 +5,7 @@ async function main() {
   
   try {
     const results = await processAllLinks();
-    console.log(`\n[fetch] Processed ${results.length} links`);
+    console.log(`\n[fetch] Processed ${results.processed.length} links, skipped ${results.skipped.length}`);
   } catch (e) {
     console.error('[fetch] Error:', e.message);
     process.exit(1);

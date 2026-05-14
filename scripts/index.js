@@ -8,9 +8,9 @@ async function main() {
   try {
     if (force) {
       console.log('[index] Reindexing all files (force mode)');
-      indexAll(true);
+      await indexAll(true);
     } else {
-      indexAll();
+      await indexAll();
     }
     
     const stats = getStats();

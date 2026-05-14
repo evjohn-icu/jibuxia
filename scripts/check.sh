@@ -39,12 +39,34 @@ echo ""
 
 # Check LLM config
 echo "[5/5] Checking LLM configuration..."
-LLM_PROVIDER=$(node -e "console.log(require('./config.json').llm.provider)")
-LLM_APIKEY=$(node -e "console.log(require('./config.json').llm.apiKey)")
-if [ -z "$LLM_APIKEY" ]; then
-    echo "WARNING: LLM API key is empty in config.json"
+LLM_PROVIDER=$(node -e "console.log(require('./config.json').llm?.provider || 'unknown')")
+LLM_MODEL=$(node -e "console.log(require('./config.json').llm?.model || 'default')")
+LLM_BASE_URL=$(node -e "console.log(require('./config.json').llm?.baseUrl || '')")
+echo "OK: LLM provider: $LLM_PROVIDER"
+echo "OK: LLM model: $LLM_MODEL"
+if [ -n "$LLM_BASE_URL" ]; then
+    echo "OK: LLM base URL: $LLM_BASE_URL"
+fi
+PROVIDER_API_KEY=""
+case "$LLM_PROVIDER" in
+    minimax)
+        PROVIDER_API_KEY="${MINIMAX_API_KEY:-$ANTHROPIC_API_KEY}"
+        ;;
+    anthropic)
+        PROVIDER_API_KEY="$ANTHROPIC_API_KEY"
+        ;;
+    openai)
+        PROVIDER_API_KEY="$OPENAI_API_KEY"
+        ;;
+esac
+
+if [ -z "$JIBUXIA_LLM_API_KEY" ] && [ -z "$PROVIDER_API_KEY" ]; then
+    echo "WARNING: no LLM API key is set for provider: $LLM_PROVIDER"
+    echo "         Set JIBUXIA_LLM_API_KEY or the provider-specific API key."
+    echo "         MiniMax: MINIMAX_API_KEY or ANTHROPIC_API_KEY; Anthropic: ANTHROPIC_API_KEY; OpenAI: OPENAI_API_KEY."
+    echo "         fetch/index/status can run; compile:llm and LLM answers need the key."
 else
-    echo "OK: LLM provider: $LLM_PROVIDER"
+    echo "OK: LLM API key is set"
 fi
 echo ""
 
@@ -63,12 +85,15 @@ echo "==================================="
 echo "Pre-flight check complete!"
 echo "==================================="
 echo ""
-echo "To start the system:"
-echo "  npm start"
+echo "To inspect the system:"
+echo "  npm run status"
+echo ""
+echo "If node/npm are installed via Homebrew on this machine, run:"
+echo '  eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"'
 echo ""
 echo "Or run individual modules:"
 echo "  npm run fetch        # Fetch URLs from raw/links/"
 echo "  npm run compile:llm  # Compile wiki with LLM"
 echo "  npm run ask \"?\"     # Ask a question"
-echo "  npm run lint:llm     # Run health check"
+echo "  npm run lint         # Run local health check"
 echo ""

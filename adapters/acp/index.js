@@ -6,7 +6,7 @@ import { watch } from 'chokidar';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONFIG_PATH = join(__dirname, 'config.json');
-const ROOT_DIR = resolve(__dirname, '..');
+const ROOT_DIR = resolve(__dirname, '..', '..');
 
 const DEFAULT_CONFIG = {
   gateway: {
@@ -196,7 +196,7 @@ async function start() {
   
   startReplyQueueWatcher();
   
-  const ws = new WebSocket(url, {
+  ws = new WebSocket(url, {
     headers: token ? { Authorization: `Bearer ${token}` } : {}
   });
   

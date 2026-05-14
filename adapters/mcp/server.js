@@ -1,9 +1,9 @@
-import { Server } from '@modelcontextprotocol/server';
-import { StdioServerTransport } from '@modelcontextprotocol/server/node';
+import { Server } from '@modelcontextprotocol/sdk/server/index.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { CallToolRequestSchema, ListToolsRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { spawn } from 'child_process';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync } from 'fs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const JIBUXIA_ROOT = join(__dirname, '..', '..');
@@ -43,59 +43,54 @@ const server = new Server(
   }
 );
 
-server.setRequestHandler(
-  { method: 'tools/list' },
-  async () => {
-    return {
-      tools: [
-        {
-          name: 'jibuxia_ingest',
-          description: 'Ingest a URL into the Jibuxia knowledge base. Fetches content, compiles it to wiki, and updates the search index.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              url: {
-                type: 'string',
-                description: 'The URL to ingest'
-              },
-              force: {
-                type: 'boolean',
-                description: 'Force re-ingest even if already processed',
-                default: false
-              }
-            },
-            required: ['url']
-          }
+const tools = [
+  {
+    name: 'jibuxia_ingest',
+    description: 'Ingest a URL into the Jibuxia knowledge base. Fetches content, compiles it to wiki, and updates the search index.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        url: {
+          type: 'string',
+          description: 'The URL to ingest'
         },
-        {
-          name: 'jibuxia_ask',
-          description: 'Ask a question against the Jibuxia knowledge base using semantic search.',
-          inputSchema: {
-            type: 'object',
-            properties: {
-              query: {
-                type: 'string',
-                description: 'The question to ask'
-              }
-            },
-            required: ['query']
-          }
-        },
-        {
-          name: 'jibuxia_status',
-          description: 'Get the current status of the Jibuxia knowledge base.',
-          inputSchema: {
-            type: 'object',
-            properties: {}
-          }
+        force: {
+          type: 'boolean',
+          description: 'Force re-ingest even if already processed',
+          default: false
         }
-      ]
-    };
+      },
+      required: ['url']
+    }
+  },
+  {
+    name: 'jibuxia_ask',
+    description: 'Ask a question against the Jibuxia knowledge base using semantic search.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: {
+          type: 'string',
+          description: 'The question to ask'
+        }
+      },
+      required: ['query']
+    }
+  },
+  {
+    name: 'jibuxia_status',
+    description: 'Get the current status of the Jibuxia knowledge base.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
   }
-);
+];
+
+server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
 
 server.setRequestHandler(
-  { method: 'tools/call' },
+  CallToolRequestSchema,
   async (request) => {
     const { name, arguments: args } = request.params;
 

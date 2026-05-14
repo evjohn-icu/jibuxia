@@ -88,8 +88,15 @@ jibuxia/
 ### 1. 配置
 
 ```bash
+# 如果本机通过 Homebrew 安装 Node.js/npm，先加载环境
+eval "$(/home/linuxbrew/.linuxbrew/bin/brew shellenv)"
+
 cp .env.example .env
 # 编辑 .env，设置 JIBUXIA_LLM_API_KEY
+# MiniMax Token Plan 也兼容官方变量：
+# ANTHROPIC_BASE_URL=https://api.minimaxi.com/anthropic
+# ANTHROPIC_API_KEY=your_minimax_api_key
+npm install
 ```
 
 ### 2. CLI 使用
